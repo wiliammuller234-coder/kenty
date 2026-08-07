@@ -1,0 +1,121 @@
+:root {
+  --bg: #0d0d12;
+  --surface: #16161f;
+  --surface-2: #1e1e2a;
+  --border: #2a2a38;
+  --text: #f2f2f7;
+  --muted: #8b8b9a;
+  --accent: #6c5ce7;
+  --accent-2: #00d9a3;
+  --danger: #ff5470;
+  --on-accent: #ffffff;
+  --radius: 16px;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: contain;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input, textarea {
+  font-family: inherit;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+html[data-theme='light'] {
+  --bg: #f4f4f9;
+  --surface: #ffffff;
+  --surface-2: #eceef4;
+  --border: #dfe0e8;
+  --text: #17171d;
+  --muted: #6b6b78;
+  --accent: #6c5ce7;
+  --accent-2: #00a884;
+  --danger: #e0304f;
+}
+
+html[data-theme='purple'] {
+  --bg: #150a26;
+  --surface: #21123f;
+  --surface-2: #2b1852;
+  --border: #3d2569;
+  --text: #f3ecff;
+  --muted: #ab98c9;
+  --accent: #b76dff;
+  --accent-2: #ff6bcb;
+  --danger: #ff5470;
+}
+
+html[data-theme='cyberpunk'] {
+  --bg: #05050b;
+  --surface: #0d0d1c;
+  --surface-2: #14142c;
+  --border: #23234a;
+  --text: #e8fdfd;
+  --muted: #7c86c2;
+  --accent: #00fff2;
+  --accent-2: #ff2ec4;
+  --danger: #ff2ec4;
+  --on-accent: #05050b;
+}
+
+html[data-theme='mint'] {
+  --bg: #07140f;
+  --surface: #0e2019;
+  --surface-2: #142b22;
+  --border: #1f3d31;
+  --text: #eafff6;
+  --muted: #7fa595;
+  --accent: #2ee6a6;
+  --accent-2: #ffd166;
+  --danger: #ff6b6b;
+  --on-accent: #07140f;
+}
+
+html[data-theme='sunset'] {
+  --bg: #1a0f1f;
+  --surface: #2b1630;
+  --surface-2: #391d40;
+  --border: #4a2a52;
+  --text: #fff1e8;
+  --muted: #c398bf;
+  --accent: #ff7a59;
+  --accent-2: #ffcd3c;
+  --danger: #ff4d6d;
+  --on-accent: #1a0f1f;
+}
+
+html[data-theme='ocean'] {
+  --bg: #08131f;
+  --surface: #102435;
+  --surface-2: #163044;
+  --border: #234258;
+  --text: #eaf6ff;
+  --muted: #7fa0b8;
+  --accent: #3aa6ff;
+  --accent-2: #34e2c6;
+  --danger: #ff5470;
+  --on-accent: #06131f;
+}

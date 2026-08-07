@@ -1,0 +1,8 @@
+{
+  "appId": "ru.kenty.app",
+  "appName": "Кенты",
+  "webDir": "dist",
+  "android": {
+    "allowMixedContent": true
+  }
+}
