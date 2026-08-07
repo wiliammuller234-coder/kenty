@@ -62,20 +62,9 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
     // that finish loading a moment later used to leave the view stuck mid-way.
     const container = screenRef.current;
     if (!container || typeof ResizeObserver === 'undefined') return;
-    const wasNearBottomRef = { current: true };
-    function onScroll() {
-      const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
-      wasNearBottomRef.current = gap < 150;
-    }
-    container.addEventListener('scroll', onScroll);
-    const observer = new ResizeObserver(() => {
-      if (wasNearBottomRef.current) scrollToEnd();
-    });
+    const observer = new ResizeObserver(() => scrollToEnd());
     observer.observe(container);
-    return () => {
-      container.removeEventListener('scroll', onScroll);
-      observer.disconnect();
-    };
+    return () => observer.disconnect();
   }, []);
 
   function scrollToEnd() {
