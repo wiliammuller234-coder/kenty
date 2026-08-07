@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getMyChats, createChat, updateChat } from '../lib/db';
 import ChatList from '../components/ChatList';
 import ChatRoom from '../components/ChatRoom';
@@ -6,8 +6,13 @@ import ChatRoom from '../components/ChatRoom';
 export default function Chat({ user, jump, friends, onAddFriend }) {
   const [chats, setChats] = useState(null);
   const [activeId, setActiveId] = useState(jump?.chatId ?? null);
+  const loadStartedRef = useRef(false);
 
   useEffect(() => {
+    // Guards against React StrictMode's intentional double-invoke in dev, which
+    // was racing two "no chats yet, create the default one" calls into two chats.
+    if (loadStartedRef.current) return;
+    loadStartedRef.current = true;
     loadChats();
   }, []);
 
