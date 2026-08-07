@@ -52,7 +52,31 @@ export async function getMyChats(phone) {
   return data.map((row) => row.chats).filter(Boolean);
 }
 
+// Two people separately adding each other by phone used to spawn two independent
+// DM chats with the same members — always look for an existing one-on-one first.
+export async function findDMChat(myPhone, otherPhone) {
+  const { data: mine } = await supabase
+    .from('chat_members')
+    .select('chat_id, chats!inner(is_dm)')
+    .eq('phone', myPhone)
+    .eq('chats.is_dm', true);
+  const chatIds = (mine || []).map((r) => r.chat_id);
+  if (chatIds.length === 0) return null;
+  const { data: shared } = await supabase
+    .from('chat_members')
+    .select('chat_id')
+    .eq('phone', otherPhone)
+    .in('chat_id', chatIds);
+  if (!shared || shared.length === 0) return null;
+  const { data: chat } = await supabase.from('chats').select('*').eq('id', shared[0].chat_id).maybeSingle();
+  return chat;
+}
+
 export async function createChat({ name, emoji, isDM = false, createdBy, memberPhones }) {
+  if (isDM && memberPhones.length === 1) {
+    const existing = await findDMChat(createdBy, memberPhones[0]);
+    if (existing) return existing;
+  }
   const { data, error } = await supabase
     .from('chats')
     .insert({ name, emoji, is_dm: isDM, created_by: createdBy })
