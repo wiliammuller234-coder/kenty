@@ -24,6 +24,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
   const [inCall, setInCall] = useState(false);
   const shameTag = getShameTag(loadState('promises', []));
   const endRef = useRef(null);
+  const screenRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -54,9 +55,28 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
 
   useEffect(() => {
     scrollToEnd();
-    const t = setTimeout(scrollToEnd, 150);
-    return () => clearTimeout(t);
   }, [messages]);
+
+  useEffect(() => {
+    // Catches any layout shift after the initial scroll — images/stickers/voice bars
+    // that finish loading a moment later used to leave the view stuck mid-way.
+    const container = screenRef.current;
+    if (!container || typeof ResizeObserver === 'undefined') return;
+    const wasNearBottomRef = { current: true };
+    function onScroll() {
+      const gap = container.scrollHeight - container.scrollTop - container.clientHeight;
+      wasNearBottomRef.current = gap < 150;
+    }
+    container.addEventListener('scroll', onScroll);
+    const observer = new ResizeObserver(() => {
+      if (wasNearBottomRef.current) scrollToEnd();
+    });
+    observer.observe(container);
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      observer.disconnect();
+    };
+  }, []);
 
   function scrollToEnd() {
     endRef.current?.scrollIntoView({ block: 'end' });
@@ -112,6 +132,8 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
   }
 
   function deleteMessage(id) {
+    // Same reasoning as sending: don't wait on the realtime echo to confirm it.
+    setMessages((list) => list.filter((m) => m.id !== id));
     dbDeleteMessage(id);
     setMenuId(null);
   }
@@ -204,7 +226,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
 
   return (
     <div className="chatroom-scope" style={scopeStyle}>
-      <div className="screen">
+      <div className="screen" ref={screenRef}>
         <div className="chat-header">
           <button className="chat-back" onClick={onBack}>← {chat.emoji} {chat.name}</button>
           <div style={{ display: 'flex', gap: 6 }}>
