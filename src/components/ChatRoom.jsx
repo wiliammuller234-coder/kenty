@@ -25,6 +25,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
   const shameTag = getShameTag(loadState('promises', []));
   const endRef = useRef(null);
   const screenRef = useRef(null);
+  const contentRef = useRef(null);
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -60,10 +61,10 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
   useEffect(() => {
     // Catches any layout shift after the initial scroll — images/stickers/voice bars
     // that finish loading a moment later used to leave the view stuck mid-way.
-    const container = screenRef.current;
-    if (!container || typeof ResizeObserver === 'undefined') return;
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === 'undefined') return;
     const observer = new ResizeObserver(() => scrollToEnd());
-    observer.observe(container);
+    observer.observe(content);
     return () => observer.disconnect();
   }, []);
 
@@ -275,6 +276,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
           </div>
         )}
 
+        <div ref={contentRef}>
         {loading && <p className="sub">Загрузка сообщений...</p>}
 
         {!loading && (
@@ -349,6 +351,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
           );
         })}
         <div ref={endRef} />
+        </div>
       </div>
 
       {stickersOpen && (
