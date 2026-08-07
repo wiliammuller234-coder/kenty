@@ -34,16 +34,28 @@ export default function VoiceMessage({ src, id }) {
     // which plays back far more reliably for MediaRecorder output.
     let objectUrl = null;
     let cancelled = false;
+    const timeout = setTimeout(() => {
+      if (!cancelled) setBroken(true);
+    }, 8000);
     fetch(src)
-      .then((r) => r.blob())
-      .then((blob) => {
+      .then((r) => r.arrayBuffer())
+      .then((buf) => {
         if (cancelled) return;
-        objectUrl = URL.createObjectURL(blob);
+        // Some devices report the recorder's mimeType with formatting quirks
+        // (e.g. "audio/webm; codecs=opus" with a space) that can trip up
+        // playback — normalize to a plain container type before creating the blob.
+        const normalized = new Blob([buf], { type: 'audio/webm' });
+        objectUrl = URL.createObjectURL(normalized);
         setPlaySrc(objectUrl);
+        clearTimeout(timeout);
       })
-      .catch(() => setBroken(true));
+      .catch(() => {
+        clearTimeout(timeout);
+        setBroken(true);
+      });
     return () => {
       cancelled = true;
+      clearTimeout(timeout);
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [src]);
