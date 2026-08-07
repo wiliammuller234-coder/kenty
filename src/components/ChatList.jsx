@@ -35,6 +35,23 @@ export default function ChatList({ chats, friends, onOpen, onCreate, onAddFriend
     setOpen(false);
   }
 
+  async function pickFromContacts() {
+    if (!navigator.contacts?.select) {
+      alert('Выбор из контактов телефона поддерживает только Chrome на Android — на компьютере или iPhone введи номер вручную.');
+      return;
+    }
+    try {
+      const picked = await navigator.contacts.select(['name', 'tel'], { multiple: false });
+      if (picked.length > 0) {
+        const c = picked[0];
+        if (c.name?.[0]) setPhoneName(c.name[0]);
+        if (c.tel?.[0]) setPhone(c.tel[0]);
+      }
+    } catch {
+      // user cancelled the picker or denied permission — nothing to do
+    }
+  }
+
   async function createByPhone() {
     if (!phone.trim() || !phoneName.trim() || busy) return;
     setBusy(true);
@@ -123,6 +140,7 @@ export default function ChatList({ chats, friends, onOpen, onCreate, onAddFriend
                   {friends.length === 0 && <span className="sub">Пока нет друзей</span>}
                 </div>
                 <p className="sub" style={{ marginTop: 8 }}>Или добавь по номеру телефона:</p>
+                <button className="btn ghost small" onClick={pickFromContacts}>📇 Выбрать из контактов</button>
                 <input
                   className="field"
                   placeholder="Имя контакта"
