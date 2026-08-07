@@ -22,6 +22,7 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
   const [menuId, setMenuId] = useState(null);
   const [chatNameDraft, setChatNameDraft] = useState(chat.name);
   const [inCall, setInCall] = useState(false);
+  const [lightbox, setLightbox] = useState(null);
   const shameTag = getShameTag(loadState('promises', []));
   const endRef = useRef(null);
   const screenRef = useRef(null);
@@ -316,7 +317,18 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
                 ) : (
                   <div className="bubble" onClick={() => toggleReacting(m.id)}>
                     <div className="author">{m.author}</div>
-                    {m.image && <img className="msg-image" src={m.image} alt="" onLoad={scrollToEnd} />}
+                    {m.image && (
+                      <img
+                        className="msg-image"
+                        src={m.image}
+                        alt=""
+                        onLoad={scrollToEnd}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setLightbox(m.image);
+                        }}
+                      />
+                    )}
                     {m.audio && <VoiceMessage src={m.audio} id={m.id} />}
                     {m.text && <div className="text">{m.text}</div>}
                     <div className="time">{m.time}</div>
@@ -401,6 +413,12 @@ export default function ChatRoom({ user, chat, onBack, onUpdateChat }) {
       )}
 
       {inCall && <CallRoom user={user} chat={chat} onClose={() => setInCall(false)} />}
+
+      {lightbox && (
+        <div className="lightbox" onClick={() => setLightbox(null)}>
+          <img src={lightbox} alt="" />
+        </div>
+      )}
     </div>
   );
 }
