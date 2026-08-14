@@ -12,6 +12,22 @@ dist
 dist-ssr
 *.local
 
+# Android signing — never public. The keystore + its password sign every release;
+# leaking either lets anyone build an "update" Android will treat as legitimate.
+android/keystore.properties
+keystore/
+android/app/google-services.json
+
+# Android/Gradle build output — generated, huge, and machine-specific.
+android/build/
+android/app/build/
+android/.gradle/
+android/local.properties
+android/captures/
+
+# Supabase CLI local cache
+supabase/.temp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

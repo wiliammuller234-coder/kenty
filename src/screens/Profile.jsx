@@ -28,6 +28,10 @@ const THEMES = [
   { id: 'mint', label: 'Мята', swatch: '#2ee6a6' },
   { id: 'sunset', label: 'Закат', swatch: '#ff7a59' },
   { id: 'ocean', label: 'Океан', swatch: '#3aa6ff' },
+  { id: 'space', label: 'Космос', swatch: '#7b2ff7' },
+  { id: 'snow', label: 'Снег', swatch: '#6ec6ff' },
+  { id: 'rain', label: 'Дождь', swatch: '#5a7a9c' },
+  { id: 'rainbow', label: 'Радуга', swatch: '#ff5cf2' },
 ];
 
 export default function Profile({ user, onUpdate, friends, purchaseCount, theme, onThemeChange, onLogout, onDeleteAccount }) {
@@ -36,11 +40,21 @@ export default function Profile({ user, onUpdate, friends, purchaseCount, theme,
   const [emoji, setEmoji] = useState(user.emoji);
   const [avatarImg, setAvatarImg] = useState(user.avatarImg || null);
   const [age, setAge] = useState(user.age || '');
+  // Stored as just "MM-DD" (no year, on purpose) — a date input needs a full date
+  // to render, so a dummy year is tacked on for display and stripped back off on save.
+  const [birthDate, setBirthDate] = useState(user.birthday ? `2000-${user.birthday}` : '');
   const [respect, setRespect] = useState(() => loadState('respect', {}));
   const [pop, setPop] = useState(null);
 
   function save() {
-    const next = { ...user, name: name.trim() || user.name, emoji, avatarImg, age: age ? Number(age) : null };
+    const next = {
+      ...user,
+      name: name.trim() || user.name,
+      emoji,
+      avatarImg,
+      age: age ? Number(age) : null,
+      birthday: birthDate ? birthDate.slice(5) : null,
+    };
     onUpdate(next);
     upsertProfile(next);
     setEditing(false);
@@ -89,6 +103,14 @@ export default function Profile({ user, onUpdate, friends, purchaseCount, theme,
               onChange={(e) => setAge(e.target.value)}
               style={{ textAlign: 'center', marginBottom: 10 }}
             />
+            <p className="sub">День рождения:</p>
+            <input
+              className="field"
+              type="date"
+              value={birthDate}
+              onChange={(e) => setBirthDate(e.target.value)}
+              style={{ marginBottom: 10 }}
+            />
             <p className="sub">Эмодзи-аватарка:</p>
             <div className="emoji-pick">
               {EMOJIS.map((e) => (
@@ -132,7 +154,7 @@ export default function Profile({ user, onUpdate, friends, purchaseCount, theme,
         Тариф растёт от активности (покупки + донаты), деньги никогда не нужны
       </p>
 
-      <Promises friends={friends} />
+      <Promises user={user} />
 
       <div className="section-title">Тема оформления</div>
       <div className="theme-pick">

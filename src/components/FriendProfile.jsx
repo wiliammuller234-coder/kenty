@@ -1,10 +1,27 @@
+import { useEffect, useState } from 'react';
 import { loadState } from '../storage';
+import { isBlocked, toggleBlock } from '../utils/blocked';
+import { isFamily, toggleFamily } from '../utils/family';
+import { getGroupPurchases } from '../lib/db';
 
-export default function FriendProfile({ friend, onClose }) {
-  const purchases = loadState('purchases', []);
+export default function FriendProfile({ friend, myPhone, onClose, onRemove }) {
+  const [blocked, setBlocked] = useState(() => (friend.phone ? isBlocked(friend.phone) : false));
+  const [family, setFamily] = useState(false);
+  const [purchases, setPurchases] = useState([]);
   const respect = loadState('respect', {});
-  const total = purchases.filter((p) => p.buyerId === friend.id).reduce((sum, p) => sum + p.amount, 0);
-  const count = purchases.filter((p) => p.buyerId === friend.id).length;
+
+  useEffect(() => {
+    if (!friend.phone) return;
+    getGroupPurchases([friend.phone]).then(setPurchases);
+  }, [friend.phone]);
+
+  useEffect(() => {
+    if (!friend.phone || !myPhone) return;
+    isFamily(myPhone, friend.phone).then(setFamily);
+  }, [friend.phone, myPhone]);
+
+  const total = purchases.reduce((sum, p) => sum + p.amount, 0);
+  const count = purchases.length;
   const respectCount = respect[friend.id] || 0;
 
   const badges = [];
@@ -39,7 +56,39 @@ export default function FriendProfile({ friend, onClose }) {
           {badges.length ? badges.map((b) => <span className="badge" key={b}>{b}</span>) : <p className="sub">Пока пусто</p>}
         </div>
 
-        <button className="btn ghost" style={{ marginTop: 16 }} onClick={onClose}>Закрыть</button>
+        {friend.phone && myPhone && (
+          <button
+            className="btn ghost"
+            style={{ marginTop: 16, borderColor: family ? 'var(--accent-2)' : undefined, color: family ? 'var(--accent-2)' : undefined }}
+            onClick={() => toggleFamily(myPhone, friend.phone).then((list) => setFamily(list.includes(friend.phone)))}
+          >
+            {family ? '👨‍👩‍👧 В семье — покупки делятся с ним автоматически' : '👨‍👩‍👧 Отметить как семью'}
+          </button>
+        )}
+        {friend.phone && (
+          <button
+            className="btn ghost"
+            style={{ marginTop: 8, color: blocked ? undefined : 'var(--danger)' }}
+            onClick={() => setBlocked(toggleBlock(friend.phone).includes(friend.phone))}
+          >
+            {blocked ? '✅ Разблокировать' : '🚫 Заблокировать'}
+          </button>
+        )}
+        {onRemove && (
+          <button
+            className="btn ghost"
+            style={{ marginTop: 8, color: 'var(--danger)' }}
+            onClick={() => {
+              if (confirm(`Удалить контакт «${friend.name}»? Это не удалит настоящий аккаунт, если он есть — только вручную добавленную запись.`)) {
+                onRemove(friend);
+                onClose();
+              }
+            }}
+          >
+            🗑 Удалить контакт
+          </button>
+        )}
+        <button className="btn ghost" style={{ marginTop: 8 }} onClick={onClose}>Закрыть</button>
       </div>
     </div>
   );

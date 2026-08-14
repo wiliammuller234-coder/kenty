@@ -2,6 +2,7 @@ const TABS = [
   { id: 'chat', icon: '💬', label: 'Чат' },
   { id: 'purchases', icon: '🛒', label: 'Покупки' },
   { id: 'birthdays', icon: '🎂', label: 'ДР' },
+  { id: 'games', icon: '🎮', label: 'Игры' },
   { id: 'profile', icon: '👤', label: 'Профиль' },
 ];
 

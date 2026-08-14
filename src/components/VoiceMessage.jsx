@@ -94,7 +94,12 @@ export default function VoiceMessage({ src, id }) {
     };
   }, [playSrc]);
 
-  function toggle() {
+  function toggle(e) {
+    // The bubble wrapping this player has its own onClick (opens the reaction picker) —
+    // without stopping propagation here, every play/pause tap also toggled that picker
+    // open/closed, which kept shifting the message's height and yanking the chat's
+    // scroll-to-bottom auto-follow into firing mid-scroll.
+    e.stopPropagation();
     const audio = audioRef.current;
     if (!audio) return;
     if (playing) {

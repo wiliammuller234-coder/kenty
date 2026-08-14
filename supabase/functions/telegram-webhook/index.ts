@@ -1,10 +1,15 @@
 // Deploy this via Supabase Dashboard → Edge Functions → Create function "telegram-webhook".
 // Paste this code, turn OFF "Verify JWT" (Telegram calls this with no auth header),
 // then add a secret TELEGRAM_BOT_TOKEN with the bot token from @BotFather.
+// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are injected automatically.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
-const SUPABASE_URL = 'https://kprfjlcydxqpcgwjzafw.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_h-w7eAaBfmktfdRa1YG-sQ_Zqnxhhou';
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+// Needs the service role now, not the public key — pending_codes' RLS no longer
+// allows public SELECT (that's what let anyone read anyone's login code directly,
+// see supabase-migration-15.sql), so this function needs elevated access to still
+// read the code itself and forward it into the Telegram message.
+const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
 const BOT_TOKEN = Deno.env.get('TELEGRAM_BOT_TOKEN');
 
 Deno.serve(async (req) => {
@@ -29,7 +34,7 @@ Deno.serve(async (req) => {
         await sendMessage(chatId, 'Открой этот чат через кнопку в приложении «Кенты» — там будет ссылка с кодом.');
         return new Response('ok');
       }
-      const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+      const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
       const { data, error } = await supabase.from('pending_codes').select('code').eq('token', token).maybeSingle();
       console.log('db result:', JSON.stringify(data), 'error:', JSON.stringify(error));
       if (data) {

@@ -1,0 +1,16 @@
+export const COUNTRIES = [
+  { code: 'RU', dial: '+7', flag: '🇷🇺', name: 'Россия' },
+  { code: 'KZ', dial: '+7', flag: '🇰🇿', name: 'Казахстан' },
+  { code: 'BY', dial: '+375', flag: '🇧🇾', name: 'Беларусь' },
+  { code: 'UA', dial: '+380', flag: '🇺🇦', name: 'Украина' },
+  { code: 'UZ', dial: '+998', flag: '🇺🇿', name: 'Узбекистан' },
+  { code: 'AM', dial: '+374', flag: '🇦🇲', name: 'Армения' },
+  { code: 'GE', dial: '+995', flag: '🇬🇪', name: 'Грузия' },
+  { code: 'KG', dial: '+996', flag: '🇰🇬', name: 'Киргизия' },
+  { code: 'AZ', dial: '+994', flag: '🇦🇿', name: 'Азербайджан' },
+  { code: 'IL', dial: '+972', flag: '🇮🇱', name: 'Израиль' },
+  { code: 'TR', dial: '+90', flag: '🇹🇷', name: 'Турция' },
+  { code: 'DE', dial: '+49', flag: '🇩🇪', name: 'Германия' },
+  { code: 'US', dial: '+1', flag: '🇺🇸', name: 'США' },
+  { code: 'MM', dial: '+95', flag: '🇲🇲', name: 'Мьянма' },
+];

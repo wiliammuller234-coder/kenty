@@ -1,39 +1,64 @@
-import { useState } from 'react';
-import { loadState, saveState } from '../storage';
+import { useEffect, useState } from 'react';
+import { getMainChatMembers, getGroupPromises, addPromiseRow, updatePromiseRow, subscribeToPromises } from '../lib/db';
 import { isOverdue } from '../utils/promises';
 
-export default function Promises({ friends }) {
-  const [promises, setPromises] = useState(() => loadState('promises', []));
+export default function Promises({ user }) {
+  const [promises, setPromises] = useState([]);
+  const [people, setPeople] = useState({});
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
   const [deadline, setDeadline] = useState('');
 
-  function persist(next) {
-    setPromises(next);
-    saveState('promises', next);
+  useEffect(() => {
+    let cancelled = false;
+    getMainChatMembers(user.phone).then((members) => {
+      if (cancelled) return;
+      const peopleMap = { [user.phone]: { name: user.name, emoji: user.emoji } };
+      for (const m of members) peopleMap[m.phone] = { name: m.profile.name, emoji: m.profile.emoji };
+      setPeople(peopleMap);
+      const phones = Object.keys(peopleMap);
+      getGroupPromises(phones).then((rows) => {
+        if (!cancelled) setPromises(rows);
+      });
+    });
+    const unsubscribe = subscribeToPromises((type, payload) => {
+      setPromises((list) => {
+        if (type === 'INSERT') return list.some((p) => p.id === payload.id) ? list : [...list, payload];
+        if (type === 'UPDATE') return list.map((p) => (p.id === payload.id ? payload : p));
+        if (type === 'DELETE') return list.filter((p) => p.id !== payload);
+        return list;
+      });
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [user.phone, user.name, user.emoji]);
+
+  function nameOf(phone) {
+    return people[phone] || { name: '?', emoji: '❓' };
   }
 
-  function addPromise() {
+  async function addPromise() {
     if (!text.trim() || !deadline) return;
-    persist([...promises, { id: crypto.randomUUID(), text: text.trim(), deadline, status: 'pending', votesAgainst: [] }]);
+    const { promise } = await addPromiseRow(user.phone, text.trim(), deadline);
+    if (promise) setPromises((list) => [...list, promise]);
     setText('');
     setDeadline('');
     setOpen(false);
   }
 
-  function markFulfilled(id) {
-    persist(promises.map((p) => (p.id === id ? { ...p, status: 'fulfilled' } : p)));
+  async function markFulfilled(id) {
+    setPromises((list) => list.map((p) => (p.id === id ? { ...p, status: 'fulfilled' } : p)));
+    await updatePromiseRow(id, { status: 'fulfilled' });
   }
 
-  function voteAgainst(id, friendId) {
-    persist(
-      promises.map((p) => {
-        if (p.id !== id || p.votesAgainst.includes(friendId)) return p;
-        const votesAgainst = [...p.votesAgainst, friendId];
-        const broken = votesAgainst.length >= 1;
-        return { ...p, votesAgainst, status: broken ? 'broken' : p.status };
-      })
-    );
+  async function voteAgainst(p) {
+    if (p.votesAgainst.includes(user.phone)) return;
+    const votesAgainst = [...p.votesAgainst, user.phone];
+    const status = votesAgainst.length >= 1 ? 'broken' : p.status;
+    setPromises((list) => list.map((x) => (x.id === p.id ? { ...x, votesAgainst, status } : x)));
+    await updatePromiseRow(p.id, { votesAgainst, status });
   }
 
   return (
@@ -42,10 +67,12 @@ export default function Promises({ friends }) {
       {promises.length === 0 && <p className="sub">Пообещай что-нибудь — если не сделаешь в срок, друзья смогут это отметить</p>}
       {promises.map((p) => {
         const overdue = isOverdue(p);
+        const author = nameOf(p.authorPhone);
+        const mine = p.authorPhone === user.phone;
         return (
           <div className="card" key={p.id} style={{ marginBottom: 8 }}>
             <div className="card-row">
-              <span>{p.text}</span>
+              <span>{author.emoji} {author.name}: {p.text}</span>
               {p.status === 'fulfilled' && <span className="badge">✅ Выполнено</span>}
               {p.status === 'broken' && <span className="badge" style={{ borderColor: 'var(--danger)', color: 'var(--danger)' }}>💀 Не выполнено</span>}
             </div>
@@ -57,18 +84,12 @@ export default function Promises({ friends }) {
 
             {p.status === 'pending' && (
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
-                <button className="btn small" onClick={() => markFulfilled(p.id)}>✅ Я сделал(а)</button>
-                {overdue &&
-                  friends.map((f) => (
-                    <button
-                      key={f.id}
-                      className="btn ghost small"
-                      disabled={p.votesAgainst.includes(f.id)}
-                      onClick={() => voteAgainst(p.id, f.id)}
-                    >
-                      🚩 {f.name} говорит "не сделал"
-                    </button>
-                  ))}
+                {mine && <button className="btn small" onClick={() => markFulfilled(p.id)}>✅ Я сделал(а)</button>}
+                {!mine && overdue && (
+                  <button className="btn ghost small" disabled={p.votesAgainst.includes(user.phone)} onClick={() => voteAgainst(p)}>
+                    🚩 Отметить "не сделал"
+                  </button>
+                )}
               </div>
             )}
           </div>

@@ -1,12 +1,14 @@
 import { useState } from 'react';
 import { normalizePhone } from '../utils/phone';
-import { upsertProfile, createPendingCode, checkPendingCode } from '../lib/db';
+import { COUNTRIES } from '../data/countries';
+import { upsertProfile, createPendingCode, checkPendingCode, getProfileByPhone } from '../lib/db';
 
 const EMOJIS = ['🦊', '🐱', '🐺', '🦉', '🐸', '🐼', '🐵', '🐧', '🦁', '🐨'];
 const BOT_USERNAME = 'kenty_verify_bot';
 
 export default function Login({ onComplete }) {
   const [step, setStep] = useState('phone');
+  const [country, setCountry] = useState(COUNTRIES[0]);
   const [phone, setPhone] = useState('');
   const [token, setToken] = useState('');
   const [codeInput, setCodeInput] = useState('');
@@ -17,15 +19,19 @@ export default function Login({ onComplete }) {
   const [birthDate, setBirthDate] = useState('');
   const [age, setAge] = useState('');
 
+  function fullPhone() {
+    return normalizePhone(country.dial + phone);
+  }
+
   async function sendCode() {
     const digits = phone.replace(/\D/g, '');
-    if (digits.length < 10) {
+    if (digits.length < 6) {
       setError('Введи нормальный номер телефона');
       return;
     }
     setError('');
     setBusy(true);
-    const result = await createPendingCode(normalizePhone(phone));
+    const result = await createPendingCode(fullPhone());
     setBusy(false);
     if (!result) {
       setError('Не получилось создать код, попробуй ещё раз');
@@ -37,13 +43,22 @@ export default function Login({ onComplete }) {
 
   async function verifyCode() {
     setBusy(true);
-    const ok = await checkPendingCode(token, codeInput);
-    setBusy(false);
+    const ok = await checkPendingCode(token, codeInput, fullPhone());
     if (!ok) {
+      setBusy(false);
       setError('Неверный код, попробуй ещё раз');
       return;
     }
+    // Reinstalling the app wipes local storage but not the Supabase profile — if this
+    // phone number already has an account, log straight back in instead of asking the
+    // person to re-enter their name/age/avatar as if they were signing up from scratch.
+    const existing = await getProfileByPhone(fullPhone());
+    setBusy(false);
     setError('');
+    if (existing) {
+      onComplete(existing);
+      return;
+    }
     setStep('name');
   }
 
@@ -55,7 +70,7 @@ export default function Login({ onComplete }) {
     const user = {
       name: name.trim(),
       emoji,
-      phone: normalizePhone(phone),
+      phone: fullPhone(),
       birthday: birthDate ? birthDate.slice(5) : null,
       age: age ? Number(age) : null,
     };
@@ -71,13 +86,28 @@ export default function Login({ onComplete }) {
 
       {step === 'phone' && (
         <>
-          <input
-            className="field"
-            type="tel"
-            placeholder="+7 900 000-00-00"
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-          />
+          <div className="phone-row" style={{ display: 'flex', gap: 8 }}>
+            <select
+              className="field"
+              style={{ flex: '0 0 92px' }}
+              value={country.code}
+              onChange={(e) => setCountry(COUNTRIES.find((c) => c.code === e.target.value) || COUNTRIES[0])}
+            >
+              {COUNTRIES.map((c) => (
+                <option key={c.code} value={c.code}>
+                  {c.flag} {c.dial}
+                </option>
+              ))}
+            </select>
+            <input
+              className="field"
+              style={{ flex: 1 }}
+              type="tel"
+              placeholder="900 000-00-00"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </div>
           {error && <p className="sub" style={{ color: 'var(--danger)' }}>{error}</p>}
           <button className="btn" onClick={sendCode} disabled={busy}>
             {busy ? 'Секунду...' : 'Получить код'}
