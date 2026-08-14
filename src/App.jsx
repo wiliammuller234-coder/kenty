@@ -133,14 +133,29 @@ export default function App() {
       if (channelMap[chat.id]) return;
       try {
         const channel = supabase.channel(`call:${chat.id}`);
+        let calibrated = false;
+        let wasEmpty = true;
         channel.on('presence', { event: 'sync' }, () => {
           const state = channel.presenceState();
           const others = Object.keys(state).filter((phone) => phone !== user.phone);
-          setIncomingCall((current) => {
-            if (others.length > 0) return { chatId: chat.id, name: chat.name, emoji: chat.emoji };
+          // The first read after a fresh (re)subscribe is a baseline snapshot, not
+          // a trigger — right after hanging up, this same channel gets a fresh
+          // subscription, and if the other side hasn't fully left the server yet,
+          // that first read can still show them present. Without this, that stale
+          // leftover read gets misread as a brand new incoming call.
+          if (!calibrated) {
+            calibrated = true;
+            wasEmpty = others.length === 0;
+            return;
+          }
+          const isEmpty = others.length === 0;
+          if (!isEmpty && wasEmpty) {
+            setIncomingCall({ chatId: chat.id, name: chat.name, emoji: chat.emoji });
+          } else if (isEmpty) {
             // Someone left a *different* chat's call — don't clear this one's banner.
-            return current?.chatId === chat.id ? null : current;
-          });
+            setIncomingCall((current) => (current?.chatId === chat.id ? null : current));
+          }
+          wasEmpty = isEmpty;
         });
         channel.subscribe();
         channelMap[chat.id] = channel;

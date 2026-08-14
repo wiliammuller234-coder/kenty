@@ -317,18 +317,22 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
     const stream = localStreamRef.current;
     const oldTrack = stream?.getVideoTracks()[0];
     if (!oldTrack) return;
+    const wasEnabled = oldTrack.enabled;
     const nextFacing = facingModeRef.current === 'user' ? 'environment' : 'user';
+    // Stop the current camera before requesting the other one — many phones only
+    // expose one camera hardware slot at a time and getUserMedia for the new
+    // facing mode can hang or fail while the old stream still holds it open.
+    stream.removeTrack(oldTrack);
+    oldTrack.stop();
     try {
       const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacing } });
       const [newTrack] = camStream.getVideoTracks();
       if (!newTrack) return;
-      newTrack.enabled = oldTrack.enabled;
+      newTrack.enabled = wasEnabled;
       for (const pc of Object.values(peersRef.current)) {
         const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
         sender?.replaceTrack(newTrack);
       }
-      stream.removeTrack(oldTrack);
-      oldTrack.stop();
       stream.addTrack(newTrack);
       facingModeRef.current = nextFacing;
       setFacingMode(nextFacing);
@@ -373,7 +377,12 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
           </div>
           {others.map(([phone, p]) => (
             <div className="video-tile" key={phone}>
-              {audioElsRef.current[phone] ? (
+              {/* Always render the <video> when there's any stream at all — it carries
+                  the audio too, even before they've turned their camera on. The
+                  placeholder used to be an either/or with this element, which meant
+                  no video track (audio-only on their end) still showed as if their
+                  camera might be on (an empty black tile) instead of the emoji. */}
+              {audioElsRef.current[phone] && (
                 <video
                   autoPlay
                   playsInline
@@ -386,7 +395,8 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
                     }
                   }}
                 />
-              ) : (
+              )}
+              {!(audioElsRef.current[phone]?.getVideoTracks().length > 0) && (
                 <div className="video-tile-off">{p.emoji}</div>
               )}
               <span className="video-tile-label">{p.name} · {CONN_LABELS[connStates[phone]] || '🟡'}</span>
