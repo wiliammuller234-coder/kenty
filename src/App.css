@@ -1343,13 +1343,10 @@ html[data-theme='ocean'] .phone::after {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 0 -16px 10px;
-  padding: 0 8px 10px;
-  position: sticky;
-  top: 0;
-  z-index: 10;
+  padding: 12px 16px 10px;
   background: var(--bg);
   border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
 }
 
 .chat-back {

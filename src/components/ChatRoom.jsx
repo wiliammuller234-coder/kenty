@@ -489,31 +489,35 @@ export default function ChatRoom({ user, chat, myRole, friends, onBack, onUpdate
 
   return (
     <div className="chatroom-scope" style={scopeStyle}>
-      <div className="screen" ref={screenRef} onScroll={handleScroll}>
-        <div className="chat-header">
-          <button className="chat-back" onClick={onBack}>
-            <span className="chat-back-icon">
-              ← {chat.avatarImg ? <img className="avatar-img header-avatar-img" src={chat.avatarImg} alt="" /> : chat.emoji}
-            </span>
-            <span className="chat-back-text">
-              <span className="chat-back-name">{chat.name}</span>
-              {chat.isDM && otherPhone && <PresenceStatus phone={otherPhone} lastSeen={otherLastSeen} />}
-            </span>
+      {/* A sibling of the scrollable .screen, not inside it — position: sticky
+          inside a flex-item scroll container is a documented bug on older
+          Chromium/WebView builds (the header would just scroll away with the
+          messages). Living outside the scroll area entirely stays visible
+          everywhere without depending on sticky positioning at all. */}
+      <div className="chat-header">
+        <button className="chat-back" onClick={onBack}>
+          <span className="chat-back-icon">
+            ← {chat.avatarImg ? <img className="avatar-img header-avatar-img" src={chat.avatarImg} alt="" /> : chat.emoji}
+          </span>
+          <span className="chat-back-text">
+            <span className="chat-back-name">{chat.name}</span>
+            {chat.isDM && otherPhone && <PresenceStatus phone={otherPhone} lastSeen={otherLastSeen} />}
+          </span>
+        </button>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {!chat.isDM && (
+            <button className="icon-btn small-icon-btn" title="Участники" onClick={() => setMembersOpen(true)}>👥</button>
+          )}
+          <button className="icon-btn small-icon-btn" title="Аудиозвонок" onClick={() => { setCallIsJoin(false); setInCall('audio'); }}>
+            📞
           </button>
-          <div style={{ display: 'flex', gap: 6 }}>
-            {!chat.isDM && (
-              <button className="icon-btn small-icon-btn" title="Участники" onClick={() => setMembersOpen(true)}>👥</button>
-            )}
-            <button className="icon-btn small-icon-btn" title="Аудиозвонок" onClick={() => { setCallIsJoin(false); setInCall('audio'); }}>
-              📞
-            </button>
-            <button className="icon-btn small-icon-btn" title="Видеозвонок" onClick={() => { setCallIsJoin(false); setInCall('video'); }}>
-              🎥
-            </button>
-            <button className="icon-btn small-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen((v) => !v)}>⚙️</button>
-          </div>
+          <button className="icon-btn small-icon-btn" title="Видеозвонок" onClick={() => { setCallIsJoin(false); setInCall('video'); }}>
+            🎥
+          </button>
+          <button className="icon-btn small-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen((v) => !v)}>⚙️</button>
         </div>
-
+      </div>
+      <div className="screen" ref={screenRef} onScroll={handleScroll}>
         {settingsOpen && (
           <div className="card">
             {!chat.isDM && (
