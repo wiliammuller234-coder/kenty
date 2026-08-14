@@ -42,6 +42,12 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
   const [connStates, setConnStates] = useState({});
   const [muted, setMuted] = useState(false);
   const [camOn, setCamOn] = useState(!!video);
+  // Separate from camOn: once a video track has ever been added (call started as
+  // video, or the camera was turned on mid-call), the video-grid layout stays —
+  // camOn alone just toggles that track's enabled/disabled placeholder within it.
+  const [hasVideoTrack, setHasVideoTrack] = useState(!!video);
+  const [facingMode, setFacingMode] = useState('user');
+  const facingModeRef = useRef('user');
   const [status, setStatus] = useState('connecting');
   const channelRef = useRef(null);
   const localStreamRef = useRef(null);
@@ -267,13 +273,68 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
     setMuted((m) => !m);
   }
 
+  function sendSignalOut(to, data) {
+    channelRef.current?.send({ type: 'broadcast', event: 'signal', payload: { from: user.phone, to, ...data } });
+  }
+
+  // Turning the camera on from what started as an audio-only call means there's no
+  // video track to just re-enable — get one now, add it to the already-connected
+  // peers, and renegotiate each connection so the new track actually reaches them.
+  async function enableCamera() {
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facingModeRef.current } });
+      const [videoTrack] = camStream.getVideoTracks();
+      if (!videoTrack) return;
+      localStreamRef.current.addTrack(videoTrack);
+      for (const [phone, pc] of Object.entries(peersRef.current)) {
+        pc.addTrack(videoTrack, localStreamRef.current);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        sendSignalOut(phone, { kind: 'offer', sdp: offer });
+      }
+      setHasVideoTrack(true);
+      setCamOn(true);
+    } catch (err) {
+      console.error('Failed to enable camera mid-call', err);
+    }
+  }
+
   function toggleCamera() {
     const stream = localStreamRef.current;
     if (!stream) return;
     const videoTracks = stream.getVideoTracks();
-    if (videoTracks.length === 0) return;
+    if (videoTracks.length === 0) {
+      enableCamera();
+      return;
+    }
     videoTracks.forEach((t) => (t.enabled = !camOn));
     setCamOn((c) => !c);
+  }
+
+  // replaceTrack swaps the sent video without renegotiating — addTrack (used for
+  // going from audio-only to video) is the only path that needs a fresh offer/answer.
+  async function flipCamera() {
+    const stream = localStreamRef.current;
+    const oldTrack = stream?.getVideoTracks()[0];
+    if (!oldTrack) return;
+    const nextFacing = facingModeRef.current === 'user' ? 'environment' : 'user';
+    try {
+      const camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: nextFacing } });
+      const [newTrack] = camStream.getVideoTracks();
+      if (!newTrack) return;
+      newTrack.enabled = oldTrack.enabled;
+      for (const pc of Object.values(peersRef.current)) {
+        const sender = pc.getSenders().find((s) => s.track?.kind === 'video');
+        sender?.replaceTrack(newTrack);
+      }
+      stream.removeTrack(oldTrack);
+      oldTrack.stop();
+      stream.addTrack(newTrack);
+      facingModeRef.current = nextFacing;
+      setFacingMode(nextFacing);
+    } catch (err) {
+      console.error('Failed to flip camera', err);
+    }
   }
 
   const others = Object.entries(participants).filter(([phone]) => phone !== user.phone);
@@ -294,7 +355,7 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
       )}
       {status === 'connecting' && <p className="sub">Подключаюсь...</p>}
 
-      {video ? (
+      {hasVideoTrack ? (
         <div className="video-grid">
           <div className="video-tile">
             <video
@@ -381,9 +442,12 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
       )}
 
       <div className="call-controls">
-        {video && (
-          <button className={`call-btn ${!camOn ? 'active' : ''}`} onClick={toggleCamera}>
-            {camOn ? '🎥' : '🎥🚫'}
+        <button className={`call-btn ${!camOn ? 'active' : ''}`} onClick={toggleCamera}>
+          {camOn ? '🎥' : '🎥🚫'}
+        </button>
+        {camOn && (
+          <button className="call-btn" title="Переключить камеру" onClick={flipCamera}>
+            🔄
           </button>
         )}
         <button className={`call-btn ${muted ? 'active' : ''}`} onClick={toggleMute}>
