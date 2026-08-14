@@ -50,6 +50,14 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
   const statsRef = useRef({});
   const iceServersRef = useRef(STUN_ONLY);
   const callStartRef = useRef(null);
+  const hadOthersRef = useRef(false);
+  // ChatRoom passes a fresh onClose function every render (inline arrow) — putting
+  // it straight in the main effect's deps would tear down and rebuild the whole
+  // call on every unrelated re-render, so read it through a ref instead.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,12 +142,19 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
         for (const phone of Object.keys(peersRef.current)) {
           if (!nextParticipants[phone]) closePeer(phone);
         }
+        const othersNow = Object.keys(nextParticipants).some((phone) => phone !== user.phone);
         // Duration should count from when someone actually joined, not from when
         // this screen opened — otherwise "Звонок завершён" includes all the time
         // spent alone on "Ждём остальных" before anyone answered.
-        if (!callStartRef.current && Object.keys(nextParticipants).some((phone) => phone !== user.phone)) {
+        if (!callStartRef.current && othersNow) {
           callStartRef.current = Date.now();
         }
+        // The other side hanging up should end the call here too, instead of
+        // leaving this screen stuck alone in an empty "call".
+        if (hadOthersRef.current && !othersNow) {
+          onCloseRef.current?.();
+        }
+        hadOthersRef.current = hadOthersRef.current || othersNow;
         setParticipants(nextParticipants);
       });
 
