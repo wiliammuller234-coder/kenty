@@ -50,6 +50,11 @@ export default function ChatRoom({ user, chat, myRole, friends, onBack, onUpdate
   const [otherPhone, setOtherPhone] = useState(null);
   const [otherLastSeen, setOtherLastSeen] = useState(null);
   const [inCall, setInCall] = useState(null);
+  // Distinguishes "I'm starting a new call" (send the incoming-call push) from
+  // "I'm joining a call someone already started" (accepting a banner/notification)
+  // — CallRoom used to notify-call unconditionally on mount, so accepting a call
+  // fired a second, spurious "incoming call" push back at the original caller.
+  const [callIsJoin, setCallIsJoin] = useState(false);
   const [lightbox, setLightbox] = useState(null);
   const [viewProfile, setViewProfile] = useState(null);
   // processImageFile/fileToDataUrl are async and can take a real moment for a large
@@ -124,7 +129,10 @@ export default function ChatRoom({ user, chat, myRole, friends, onBack, onUpdate
   }, [chat.id, chat.isDM, user.phone]);
 
   useEffect(() => {
-    if (autoJoinCall) setInCall('audio');
+    if (autoJoinCall) {
+      setCallIsJoin(true);
+      setInCall('audio');
+    }
   }, [autoJoinCall]);
 
   useEffect(() => {
@@ -496,10 +504,10 @@ export default function ChatRoom({ user, chat, myRole, friends, onBack, onUpdate
             {!chat.isDM && (
               <button className="icon-btn small-icon-btn" title="Участники" onClick={() => setMembersOpen(true)}>👥</button>
             )}
-            <button className="icon-btn small-icon-btn" title="Аудиозвонок" onClick={() => setInCall('audio')}>
+            <button className="icon-btn small-icon-btn" title="Аудиозвонок" onClick={() => { setCallIsJoin(false); setInCall('audio'); }}>
               📞
             </button>
-            <button className="icon-btn small-icon-btn" title="Видеозвонок" onClick={() => setInCall('video')}>
+            <button className="icon-btn small-icon-btn" title="Видеозвонок" onClick={() => { setCallIsJoin(false); setInCall('video'); }}>
               🎥
             </button>
             <button className="icon-btn small-icon-btn" title="Настройки чата" onClick={() => setSettingsOpen((v) => !v)}>⚙️</button>
@@ -874,7 +882,7 @@ export default function ChatRoom({ user, chat, myRole, friends, onBack, onUpdate
         </button>
       )}
 
-      {inCall && <CallRoom user={user} chat={chat} video={inCall === 'video'} onClose={() => setInCall(null)} />}
+      {inCall && <CallRoom user={user} chat={chat} video={inCall === 'video'} isJoin={callIsJoin} onClose={() => setInCall(null)} />}
 
       {lightbox && (
         <div className="lightbox" onClick={() => setLightbox(null)}>

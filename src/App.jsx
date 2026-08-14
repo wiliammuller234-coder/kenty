@@ -16,6 +16,7 @@ import { setupPush } from './lib/push';
 import { startRingtone } from './utils/ringtone';
 import { supabase } from './lib/supabase';
 import { getActiveChatId } from './lib/activeChat';
+import { registerCallWatcher, unregisterCallWatcher, registerResync } from './lib/activeCall';
 import Login from './screens/Login';
 import Chat from './screens/Chat';
 import Purchases from './screens/Purchases';
@@ -107,6 +108,17 @@ export default function App() {
     saveState('theme', theme);
   }, [theme]);
 
+  // myChats changes reference every ~20s (the poll below) even when its contents
+  // are the same — reading it from a ref instead of a dependency means the
+  // long-lived effect below can add/remove just the delta instead of tearing down
+  // and rebuilding every channel on every poll tick (which was closing a real
+  // presence-tracking channel and reopening a fresh one, risking a missed call
+  // signal in the gap between unsubscribe and resubscribe).
+  const myChatsRef = useRef([]);
+  useEffect(() => {
+    myChatsRef.current = myChats;
+  }, [myChats]);
+
   // Watches every chat's call channel from anywhere in the app (not just while that
   // chat is open) so a call in progress actually shows up as a banner instead of
   // only being visible to whoever happens to already be looking at it. Used to only
@@ -114,33 +126,68 @@ export default function App() {
   // unless they'd already been pushed into that exact chat, which made DM calls
   // depend entirely on the FCM push (and its token) ever reaching the other phone.
   useEffect(() => {
-    if (!user || myChats.length === 0) return;
-    const channels = myChats.map((chat) => {
-      const channel = supabase.channel(`call:${chat.id}`);
-      channel.on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        const others = Object.keys(state).filter((phone) => phone !== user.phone);
-        setIncomingCall((current) => {
-          if (others.length > 0) return { chatId: chat.id, name: chat.name, emoji: chat.emoji };
-          // Someone left a *different* chat's call — don't clear this one's banner.
-          return current?.chatId === chat.id ? null : current;
+    if (!user) return;
+    const channelMap = {};
+
+    function ensureChannel(chat) {
+      if (channelMap[chat.id]) return;
+      try {
+        const channel = supabase.channel(`call:${chat.id}`);
+        channel.on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          const others = Object.keys(state).filter((phone) => phone !== user.phone);
+          setIncomingCall((current) => {
+            if (others.length > 0) return { chatId: chat.id, name: chat.name, emoji: chat.emoji };
+            // Someone left a *different* chat's call — don't clear this one's banner.
+            return current?.chatId === chat.id ? null : current;
+          });
         });
+        channel.subscribe();
+        channelMap[chat.id] = channel;
+        // CallRoom needs sole ownership of this exact topic the moment it opens —
+        // give it a way to reclaim this channel synchronously instead of leaving
+        // both of us subscribed to it at once (see activeCall.js).
+        registerCallWatcher(chat.id, () => {
+          supabase.removeChannel(channel);
+          delete channelMap[chat.id];
+        });
+      } catch (e) {
+        console.error('call-watch subscribe failed for', chat.id, e);
+      }
+    }
+
+    function sync() {
+      const current = myChatsRef.current;
+      current.forEach(ensureChannel);
+      const currentIds = new Set(current.map((c) => c.id));
+      Object.keys(channelMap).forEach((id) => {
+        if (!currentIds.has(id)) {
+          supabase.removeChannel(channelMap[id]);
+          unregisterCallWatcher(id);
+          delete channelMap[id];
+        }
       });
-      channel.subscribe();
-      return channel;
-    });
+    }
+
+    sync();
+    registerResync(sync);
+    const interval = setInterval(sync, 20000);
+
     return () => {
-      channels.forEach((c) => supabase.removeChannel(c));
+      clearInterval(interval);
+      registerResync(null);
+      Object.keys(channelMap).forEach((id) => unregisterCallWatcher(id));
+      Object.values(channelMap).forEach((c) => supabase.removeChannel(c));
     };
-  }, [user?.phone, myChats]);
+  }, [user?.phone]);
 
   // Rings for as long as the "someone's calling" screen is actually shown — a
   // silent banner is easy to miss entirely, especially with the phone in a pocket.
   useEffect(() => {
-    if (!incomingCall || tab === 'chat') return;
+    if (!incomingCall) return;
     const stop = startRingtone();
     return stop;
-  }, [incomingCall, tab]);
+  }, [incomingCall]);
 
   function joinIncomingCall() {
     if (!incomingCall) return;
@@ -157,14 +204,21 @@ export default function App() {
     if (!user) return;
     let cancelled = false;
 
-    async function bootstrap() {
-      // Known gap: a chat created later in this same session (new DM/group) isn't
-      // added to this set until the app restarts and re-bootstraps — acceptable for
-      // now, not worth threading a live updater through Chat.jsx just for that.
+    // A chat created mid-session (new DM/group) — including one someone else just
+    // created with you — wasn't picked up until the app restarted, so calls/messages
+    // in it never reached this device's watchers. Re-polling the chat list keeps it
+    // current without threading a live updater through every chat-creation path.
+    async function refreshChats() {
       const chats = await getMyChats(user.phone);
       if (cancelled) return;
       setMyChats(chats);
       myChatIdsRef.current = new Set(chats.map((c) => c.id));
+      return chats;
+    }
+
+    async function bootstrap() {
+      const chats = await refreshChats();
+      if (cancelled || !chats) return;
 
       const reads = await getChatReads(user.phone);
       // Chats that predate this feature have no read marker yet — seeding them to
@@ -182,6 +236,7 @@ export default function App() {
       if (!cancelled) setUnreadCounts(counts);
     }
     bootstrap();
+    const chatsPollInterval = setInterval(refreshChats, 20000);
 
     const unsubscribe = subscribeToAllMessages((row) => {
       if (row.author_phone === user.phone || row.author_phone === 'system') return;
@@ -200,6 +255,7 @@ export default function App() {
 
     return () => {
       cancelled = true;
+      clearInterval(chatsPollInterval);
       unsubscribe();
     };
   }, [user?.phone]);
@@ -232,6 +288,12 @@ export default function App() {
     startPresence(user);
     setupPush(user, {
       onCall: (chatId) => {
+        // If the in-app banner (Realtime) and the native push notification both
+        // fired for this call and the call was accepted via the native
+        // notification, the in-app banner/ringtone never got its own "stop"
+        // signal — clear it here too so it doesn't keep ringing underneath a
+        // call that's already connecting.
+        setIncomingCall(null);
         setChatJump({ chatId, nonce: Date.now(), autoCall: true });
         setTab('chat');
       },
@@ -348,7 +410,7 @@ export default function App() {
         )}
       </div>
 
-      {incomingCall && !(tab === 'chat') && (
+      {incomingCall && (
         <div className="incoming-call-screen">
           <div className="incoming-call-pulse">{incomingCall.emoji}</div>
           <div className="incoming-call-label">Входящий звонок</div>

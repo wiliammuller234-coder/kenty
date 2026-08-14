@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { postSystemMessage } from '../lib/db';
+import { releaseCallWatcher, requestResync } from '../lib/activeCall';
 
 // STUN alone only works when both sides can be reached directly — behind a
 // symmetric NAT (common on mobile carriers) it silently connects with no audio.
@@ -36,7 +37,7 @@ async function fetchIceServers() {
   return STUN_ONLY;
 }
 
-export default function CallRoom({ user, chat, onClose, video }) {
+export default function CallRoom({ user, chat, onClose, video, isJoin }) {
   const [participants, setParticipants] = useState({});
   const [connStates, setConnStates] = useState({});
   const [muted, setMuted] = useState(false);
@@ -79,26 +80,37 @@ export default function CallRoom({ user, chat, onClose, video }) {
       }
       localStreamRef.current = stream;
       setStatus('connected');
-      callStartRef.current = Date.now();
 
       // Presence only tells people already IN the app that a call is happening — this
       // is what actually wakes up someone whose app is closed or backgrounded.
-      fetch('https://kprfjlcydxqpcgwjzafw.supabase.co/functions/v1/notify-call', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          apikey: 'sb_publishable_h-w7eAaBfmktfdRa1YG-sQ_Zqnxhhou',
-          Authorization: 'Bearer sb_publishable_h-w7eAaBfmktfdRa1YG-sQ_Zqnxhhou',
-        },
-        body: JSON.stringify({
-          chatId: chat.id,
-          callerPhone: user.phone,
-          callerName: user.name,
-          chatName: chat.name,
-          chatEmoji: chat.emoji,
-        }),
-      }).catch(() => {});
+      // Only the person actually starting the call sends this — CallRoom mounts for
+      // the person *accepting* one too, and without this check that mount fired a
+      // second "incoming call" push back at the original caller, arriving as a
+      // spurious ring shortly after the real call (a delayed FCM push arriving
+      // after the real call already ended, sometimes even after it was hung up).
+      if (!isJoin) {
+        fetch('https://kprfjlcydxqpcgwjzafw.supabase.co/functions/v1/notify-call', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            apikey: 'sb_publishable_h-w7eAaBfmktfdRa1YG-sQ_Zqnxhhou',
+            Authorization: 'Bearer sb_publishable_h-w7eAaBfmktfdRa1YG-sQ_Zqnxhhou',
+          },
+          body: JSON.stringify({
+            chatId: chat.id,
+            callerPhone: user.phone,
+            callerName: user.name,
+            chatName: chat.name,
+            chatEmoji: chat.emoji,
+          }),
+        }).catch(() => {});
+      }
 
+      // The App-level "who's calling" watcher (App.jsx) may already hold a
+      // subscribed channel for this exact topic — a second .on()/.subscribe() on
+      // the same topic throws synchronously, which would silently break this
+      // call's own signaling. Force it to give up that channel first.
+      releaseCallWatcher(chat.id);
       const channel = supabase.channel(`call:${chat.id}`, {
         config: { presence: { key: user.phone } },
       });
@@ -121,6 +133,12 @@ export default function CallRoom({ user, chat, onClose, video }) {
         }
         for (const phone of Object.keys(peersRef.current)) {
           if (!nextParticipants[phone]) closePeer(phone);
+        }
+        // Duration should count from when someone actually joined, not from when
+        // this screen opened — otherwise "Звонок завершён" includes all the time
+        // spent alone on "Ждём остальных" before anyone answered.
+        if (!callStartRef.current && Object.keys(nextParticipants).some((phone) => phone !== user.phone)) {
+          callStartRef.current = Date.now();
         }
         setParticipants(nextParticipants);
       });
@@ -211,6 +229,11 @@ export default function CallRoom({ user, chat, onClose, video }) {
         channelRef.current.untrack();
         supabase.removeChannel(channelRef.current);
       }
+      // Give the untrack a moment to actually reach the server before the
+      // App-level watcher resubscribes to this same topic — resubscribing
+      // immediately risks reading a not-yet-updated presence state (still showing
+      // this call as active) and misreading it as a brand new incoming call.
+      setTimeout(requestResync, 1500);
       // Leaves a record in the chat itself — otherwise a call that just happened
       // is invisible the moment everyone hangs up, with nothing to show it occurred.
       if (callStartRef.current) {
@@ -220,7 +243,7 @@ export default function CallRoom({ user, chat, onClose, video }) {
         postSystemMessage(chat.id, `${video ? '🎥' : '📞'} Звонок завершён · ${mins}:${secs}`);
       }
     };
-  }, [chat.id, user.phone, user.name, user.emoji, video]);
+  }, [chat.id, user.phone, user.name, user.emoji, video, isJoin]);
 
   function toggleMute() {
     const stream = localStreamRef.current;
