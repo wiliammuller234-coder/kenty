@@ -42,10 +42,6 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
   const [connStates, setConnStates] = useState({});
   const [muted, setMuted] = useState(false);
   const [camOn, setCamOn] = useState(!!video);
-  // Separate from camOn: once a video track has ever been added (call started as
-  // video, or the camera was turned on mid-call), the video-grid layout stays —
-  // camOn alone just toggles that track's enabled/disabled placeholder within it.
-  const [hasVideoTrack, setHasVideoTrack] = useState(!!video);
   const [facingMode, setFacingMode] = useState('user');
   const facingModeRef = useRef('user');
   const [status, setStatus] = useState('connecting');
@@ -292,7 +288,6 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
         await pc.setLocalDescription(offer);
         sendSignalOut(phone, { kind: 'offer', sdp: offer });
       }
-      setHasVideoTrack(true);
       setCamOn(true);
     } catch (err) {
       console.error('Failed to enable camera mid-call', err);
@@ -342,6 +337,12 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
   }
 
   const others = Object.entries(participants).filter(([phone]) => phone !== user.phone);
+  // Switch to the video layout if EITHER side has an active video track — this used
+  // to check only the local camera, so if the other person turned theirs on and you
+  // hadn't, you stayed on the audio layout and couldn't see them at all.
+  const localHasVideo = (localStreamRef.current?.getVideoTracks().length ?? 0) > 0;
+  const remoteHasVideo = others.some(([phone]) => (audioElsRef.current[phone]?.getVideoTracks().length ?? 0) > 0);
+  const showVideoLayout = localHasVideo || remoteHasVideo;
 
   return (
     <div className="call-overlay">
@@ -359,7 +360,7 @@ export default function CallRoom({ user, chat, onClose, video, isJoin }) {
       )}
       {status === 'connecting' && <p className="sub">Подключаюсь...</p>}
 
-      {hasVideoTrack ? (
+      {showVideoLayout ? (
         <div className="video-grid">
           <div className="video-tile">
             <video
